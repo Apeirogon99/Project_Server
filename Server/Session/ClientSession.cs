@@ -21,7 +21,7 @@ namespace Server
 		{
 			Console.WriteLine($"OnConnected : {endPoint}");
 
-			Program.Room.Push(() => Program.Room.Enter(this));
+			//Program.Room.Push(() => Program.Room.Enter(this));
 		}
 
 		public override void OnRecvPacket(ArraySegment<byte> buffer)

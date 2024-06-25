@@ -1,4 +1,5 @@
-﻿using ServerCore;
+﻿using LiteNetLib;
+using ServerCore;
 using System;
 using System.Net;
 using System.Net.Sockets;
@@ -13,31 +14,50 @@ namespace DummyClient
 	{
 		static void Main(string[] args)
 		{
-			// DNS (Domain Name System)
-			string host = Dns.GetHostName();
-			IPHostEntry ipHost = Dns.GetHostEntry(host);
-			IPAddress ipAddr = ipHost.AddressList[0];
-			IPEndPoint endPoint = new IPEndPoint(ipAddr, 7777);
 
-			Connector connector = new Connector();
+            EventBasedNetListener listener = new EventBasedNetListener();
+            NetManager client = new NetManager(listener);
+            client.Start();
+            client.Connect("localhost" /* host ip or name */, 9050 /* port */, "SomeConnectionKey" /* text key or NetDataWriter */);
+            listener.NetworkReceiveEvent += (fromPeer, dataReader, deliveryMethod, channel) =>
+            {
+                Console.WriteLine("We got: {0}", dataReader.GetString(100 /* max length of string */));
+                dataReader.Recycle();
+            };
 
-			connector.Connect(endPoint, 
-				() => { return SessionManager.Instance.Generate(); },
-				500);
+            while (!Console.KeyAvailable)
+            {
+                client.PollEvents();
+                Thread.Sleep(15);
+            }
 
-			while (true)
-			{
-				try
-				{
-					SessionManager.Instance.SendForEach();
-				}
-				catch (Exception e)
-				{
-					Console.WriteLine(e.ToString());
-				}
+            client.Stop();
 
-				Thread.Sleep(250);
-			}
-		}
+            // DNS (Domain Name System)
+            //string host = Dns.GetHostName();
+            //IPHostEntry ipHost = Dns.GetHostEntry(host);
+            //IPAddress ipAddr = ipHost.AddressList[0];
+            //IPEndPoint endPoint = new IPEndPoint(ipAddr, 7777);
+
+            //Connector connector = new Connector();
+
+            //connector.Connect(endPoint, 
+            //	() => { return SessionManager.Instance.Generate(); },
+            //	500);
+
+            //while (true)
+            //{
+            //	try
+            //	{
+            //		SessionManager.Instance.SendForEach();
+            //	}
+            //	catch (Exception e)
+            //	{
+            //		Console.WriteLine(e.ToString());
+            //	}
+
+            //	Thread.Sleep(250);
+            //}
+        }
 	}
 }
