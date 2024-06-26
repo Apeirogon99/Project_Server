@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="CloudStructures" Version="3.3.0" />
     <PackageReference Include="LiteNetLib" Version="1.2.0" />
   </ItemGroup>
 
