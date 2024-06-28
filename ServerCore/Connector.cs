@@ -1,55 +1,73 @@
-﻿using System;
+﻿using LiteNetLib;
+using System;
 using System.Collections.Generic;
-using System.Net;
+using System.Linq;
 using System.Net.Sockets;
+using System.Net;
 using System.Text;
+using System.Threading.Tasks;
+using StackExchange.Redis;
+using System.Diagnostics;
 
 namespace ServerCore
 {
-	public class Connector
-	{
-		Func<Session> _sessionFactory;
+    internal class Connector : INetEventListener
+    {
+        private ClientNetworkService    mNetworkService;
 
-		public void Connect(IPEndPoint endPoint, Func<Session> sessionFactory, int count = 1)
-		{
-			for (int i = 0; i < count; i++)
-			{
-				// 휴대폰 설정
-				Socket socket = new Socket(endPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-				_sessionFactory = sessionFactory;
+        public Connector(ClientNetworkService clientNetworkService)
+        {
+            mNetworkService = clientNetworkService;
+        }
 
-				SocketAsyncEventArgs args = new SocketAsyncEventArgs();
-				args.Completed += OnConnectCompleted;
-				args.RemoteEndPoint = endPoint;
-				args.UserToken = socket;
+        public void OnPeerConnected(NetPeer peer)
+        {
+            Session session = mNetworkService.mSessionFactory.Invoke();
+            session.Init(peer);
+            session.OnConnected(peer);
 
-				RegisterConnect(args);
-			}
-		}
+            peer.Tag = session;
 
-		void RegisterConnect(SocketAsyncEventArgs args)
-		{
-			Socket socket = args.UserToken as Socket;
-			if (socket == null)
-				return;
+            //LogicTimer.Start();
+        }
 
-			bool pending = socket.ConnectAsync(args);
-			if (pending == false)
-				OnConnectCompleted(null, args);
-		}
+        public void OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo)
+        {
+            Console.WriteLine("Disconnection: {0}, Reason : {1}, Error : {2}", peer, disconnectInfo.Reason.ToString(), disconnectInfo.SocketErrorCode.ToString());
+        }
 
-		void OnConnectCompleted(object sender, SocketAsyncEventArgs args)
-		{
-			if (args.SocketError == SocketError.Success)
-			{
-				Session session = _sessionFactory.Invoke();
-				session.Start(args.ConnectSocket);
-				session.OnConnected(args.RemoteEndPoint);
-			}
-			else
-			{
-				Console.WriteLine($"OnConnectCompleted Fail: {args.SocketError}");
-			}
-		}
-	}
+        public void OnNetworkError(IPEndPoint endPoint, SocketError socketError)
+        {
+            Console.WriteLine($"[{endPoint}] NetworkError: " + socketError);
+        }
+
+        public void OnNetworkReceive(NetPeer peer, NetPacketReader reader, byte channelNumber, DeliveryMethod deliveryMethod)
+        {
+            ArraySegment<byte> packet = reader.GetBytesSegment(reader.AvailableBytes);
+            var session = (Session)peer.Tag;
+            if (session != null)
+            {
+                session.OnRecv(packet, channelNumber);
+            }
+        }
+
+        public void OnNetworkReceiveUnconnected(IPEndPoint remoteEndPoint, NetPacketReader reader, UnconnectedMessageType messageType)
+        {
+            Console.WriteLine("OnNetworkReceiveUnconnected");
+        }
+
+        public void OnNetworkLatencyUpdate(NetPeer peer, int latency)
+        {
+            var session = (Session)peer.Tag;
+            if (session != null)
+            {
+                session.mPing = latency;
+            }
+        }
+
+        public void OnConnectionRequest(ConnectionRequest request)
+        {
+            //클라이언트 사용 X
+        }
+    }
 }

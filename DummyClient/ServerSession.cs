@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Net;
 using ServerCore;
+using LiteNetLib;
 
 namespace DummyClient
 {
@@ -10,15 +11,19 @@ namespace DummyClient
 	{
 		public override void OnConnected(EndPoint endPoint)
 		{
-			Console.WriteLine($"OnConnected : {endPoint}");			
-		}
+			Console.WriteLine($"OnConnected : {endPoint}");
+
+           //C2S_Chat chat = new C2S_Chat();
+           //chat.chat = "Hello";
+           //this.Send(chat.Write(), DeliveryMethod.ReliableOrdered);
+        }
 
 		public override void OnDisconnected(EndPoint endPoint)
 		{
 			Console.WriteLine($"OnDisconnected : {endPoint}");
 		}
 
-		public override void OnRecvPacket(ArraySegment<byte> buffer)
+		public override void OnRecvPacket(ArraySegment<byte> buffer, byte channelNumber)
 		{
 			PacketManager.Instance.OnRecvPacket(this, buffer);
 		}

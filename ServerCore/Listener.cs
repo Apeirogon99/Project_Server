@@ -1,57 +1,103 @@
-﻿using System;
+﻿using LiteNetLib;
+using LiteNetLib.Utils;
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection.PortableExecutable;
 using System.Text;
 
 namespace ServerCore
 {
-	public class Listener
-	{
-		Socket _listenSocket;
-		Func<Session> _sessionFactory;
+	public class Listener : INetEventListener
+    {
+        private ServerNetworkService mNetworkService;
 
-		public void Init(IPEndPoint endPoint, Func<Session> sessionFactory, int register = 10, int backlog = 100)
-		{
-			_listenSocket = new Socket(endPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-			_sessionFactory += sessionFactory;
+        public Listener(ServerNetworkService serverNetworkService)
+        {
+            mNetworkService = serverNetworkService;
+        }
 
-			// 문지기 교육
-			_listenSocket.Bind(endPoint);
+        public void OnPeerConnected(NetPeer peer)
+        {
+            Session session = mNetworkService.mSessionFactory.Invoke();
+            session.Init(peer);
+            session.OnConnected(peer);
 
-			// 영업 시작
-			// backlog : 최대 대기수
-			_listenSocket.Listen(backlog);
+            peer.Tag = session;
 
-			for (int i = 0; i < register; i++)
-			{
-				SocketAsyncEventArgs args = new SocketAsyncEventArgs();
-				args.Completed += new EventHandler<SocketAsyncEventArgs>(OnAcceptCompleted);
-				RegisterAccept(args);
-			}
-		}
+            mNetworkService.mSessionManager.Insert(session);
+        }
 
-		void RegisterAccept(SocketAsyncEventArgs args)
-		{
-			args.AcceptSocket = null;
+        public void OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo)
+        {
+            Console.WriteLine("Disconnection: {0}, Reason : {1}, Error : {2}", peer, disconnectInfo.Reason.ToString(), disconnectInfo.SocketErrorCode.ToString());
+            
+            var session = (Session)peer.Tag;
+            if (session != null)
+            {
+                session.OnDisconnected(peer);
 
-			bool pending = _listenSocket.AcceptAsync(args);
-			if (pending == false)
-				OnAcceptCompleted(null, args);
-		}
+                mNetworkService.mSessionManager.Remove(session);
+            }
 
-		void OnAcceptCompleted(object sender, SocketAsyncEventArgs args)
-		{
-			if (args.SocketError == SocketError.Success)
-			{
-				Session session = _sessionFactory.Invoke();
-				session.Start(args.AcceptSocket);
-				session.OnConnected(args.AcceptSocket.RemoteEndPoint);
-			}
-			else
-				Console.WriteLine(args.SocketError.ToString());
+        }
 
-			RegisterAccept(args);
-		}
-	}
+        public void OnNetworkError(IPEndPoint endPoint, SocketError socketError)
+        {
+            Console.WriteLine($"[{endPoint}] NetworkError: " + socketError);
+        }
+
+        public void OnNetworkReceive(NetPeer peer, NetPacketReader reader, byte channelNumber, DeliveryMethod deliveryMethod)
+        {
+            if (false == mNetworkService.mUseChannel)
+            {
+                channelNumber = 0;
+            }
+
+            ArraySegment<byte> packet = reader.GetBytesSegment(reader.AvailableBytes);
+            var session = (Session)peer.Tag;
+            if (session != null)
+            {
+                session.OnRecv(packet, channelNumber);
+            }
+            
+        }
+
+        public void OnNetworkReceiveUnconnected(IPEndPoint remoteEndPoint, NetPacketReader reader, UnconnectedMessageType messageType)
+        {
+            Console.WriteLine("OnNetworkReceiveUnconnected");
+        }
+
+        public void OnNetworkLatencyUpdate(NetPeer peer, int latency)
+        {
+            var session = (Session)peer.Tag;
+            if (session != null)
+            {
+                session.mPing = latency;
+            }
+        }
+
+        public void OnConnectionRequest(ConnectionRequest request)
+        {
+
+            if(mNetworkService.mManager.PoolCount >= mNetworkService.mBackLog)
+            {
+                return;
+            }
+
+            if (mNetworkService.mSessionManager.GetSessionCount() >= mNetworkService.mRegister)
+            {
+                return;
+            }
+
+            NetPeer peer = request.AcceptIfKey(mNetworkService.mAcceptKey);
+            if(peer.Tag == null)
+            {
+                request.Reject();
+            }
+        }
+
+    }
 }

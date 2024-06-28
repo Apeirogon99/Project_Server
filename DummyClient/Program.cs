@@ -1,10 +1,7 @@
-﻿using LiteNetLib;
-using ServerCore;
-using System;
+﻿using System;
 using System.Net;
-using System.Net.Sockets;
-using System.Text;
 using System.Threading;
+using ServerCore;
 
 namespace DummyClient
 {
@@ -12,38 +9,32 @@ namespace DummyClient
 
 	class Program
 	{
-		static void Main(string[] args)
+
+        public static ClientNetworkService mNetworkService = new ClientNetworkService();
+
+        static void Main(string[] args)
 		{
 
-            EventBasedNetListener listener = new EventBasedNetListener();
-            NetManager client = new NetManager(listener);
-            client.Start();
-            client.Connect("localhost" /* host ip or name */, 9050 /* port */, "SomeConnectionKey" /* text key or NetDataWriter */);
-            listener.NetworkReceiveEvent += (fromPeer, dataReader, deliveryMethod, channel) =>
-            {
-                Console.WriteLine("We got: {0}", dataReader.GetString(100 /* max length of string */));
-                dataReader.Recycle();
-            };
+            string host = Dns.GetHostName();
+            IPHostEntry ipHost = Dns.GetHostEntry(host);
+            IPAddress ipAddr = ipHost.AddressList[0];
+            IPEndPoint endPoint = new IPEndPoint(ipAddr, 9050);
 
-            while (!Console.KeyAvailable)
+            Func<Session> session = () => { return new ServerSession(); };
+
+            mNetworkService.Init(endPoint, session, "SomeConnectionKey");
+            mNetworkService.Start();
+
+            Console.WriteLine("q: Quit Client.");
+            while (true)
             {
-                client.PollEvents();
-                Thread.Sleep(15);
+                string input = Console.ReadLine();
+                if (input.Equals("q"))
+                {
+                    mNetworkService.Stop();
+                    break;
+                }
             }
-
-            client.Stop();
-
-            // DNS (Domain Name System)
-            //string host = Dns.GetHostName();
-            //IPHostEntry ipHost = Dns.GetHostEntry(host);
-            //IPAddress ipAddr = ipHost.AddressList[0];
-            //IPEndPoint endPoint = new IPEndPoint(ipAddr, 7777);
-
-            //Connector connector = new Connector();
-
-            //connector.Connect(endPoint, 
-            //	() => { return SessionManager.Instance.Generate(); },
-            //	500);
 
             //while (true)
             //{
